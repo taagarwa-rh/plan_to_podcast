@@ -1,0 +1,28 @@
+kind: Kustomization
+apiVersion: kustomize.config.k8s.io/v1beta1
+
+resources:
+  - ./../base/
+
+namespace: sandbox-ssa-gfa
+
+images:
+  - name: "" # TODO: Fill in image name
+    newTag: 0.1.0
+
+labels:
+  - pairs:
+      valuestream: "Unassigned"
+      project: "plan-to-podcast-project"
+      paas.redhat.com/appcode: "" # TODO: Fill in with appcode if applicable
+    includeTemplates: true
+
+patches:
+    # TODO: Replace with correct hostname
+  - patch: |-
+      - op: replace
+        path: /spec/host
+        value: ""
+    target:
+      kind: Route
+      name: "plan-to-podcast-route"

@@ -1,0 +1,36 @@
+---
+kind: BuildConfig
+apiVersion: build.openshift.io/v1
+metadata:
+  name: "plan-to-podcast"
+spec:
+  nodeSelector: null
+  output:
+    to:
+      kind: ImageStreamTag
+      name: "plan-to-podcast:latest"
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+  successfulBuildHistoryLimit: 5
+  failedBuildHistoryLimit: 5
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: "Containerfile"
+      env:
+        - name: GIT_SSL_NO_VERIFY
+          value: 'true'
+  postCommit: {}
+  source:
+    type: Git
+    git:
+      uri: "" # TODO: Fill in with GitLab URL
+      ref: main
+    sourceSecret:
+      name: git-sync-gfa
+  triggers:
+    - type: ImageChange
+    - type: ConfigChange
+  runPolicy: Serial

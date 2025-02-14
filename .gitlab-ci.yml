@@ -1,0 +1,100 @@
+---
+stages:
+  - quality
+  - validate
+  - build
+
+default:
+  image: quay.io/fedora/python-311:311
+  cache:
+    key: cache-$CI_COMMIT_REF_SLUG
+    paths:
+      - venv # This is the path of the venv created below
+  tags:
+    - shared
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Before Template
+.install-deps-template: &install-deps
+  before_script:
+    - python -m venv venv
+    - source venv/bin/activate
+    - pip install --upgrade pip poetry==1.8.2
+    - wget -P /tmp https://certs.corp.redhat.com/certs/Current-IT-Root-CAs.pem
+    - git config --global http.sslCAInfo /tmp/Current-IT-Root-CAs.pem
+    - poetry config virtualenvs.in-project true
+    - poetry config certificates.de-cop-nexus.cert /tmp/Current-IT-Root-CAs.pem
+    - poetry install -vv
+
+# Jobs
+format:
+  <<: *install-deps
+  stage: quality
+  script:
+    - poetry run ruff check --select I plan_to_podcast tests 
+    - poetry run ruff format --check plan_to_podcast tests 
+
+lint:
+  <<: *install-deps
+  stage: quality
+  script:
+    - poetry run ruff check plan_to_podcast tests 
+
+test:
+  <<: *install-deps
+  stage: validate
+  coverage: '/TOTAL.*\s(\d+\.\d+\%)/'
+  artifacts:
+    when: always
+    reports:
+      junit: pytest_report.xml
+  script:
+    - poetry run pytest -vv --disable-warnings --cov-report=term-missing --cov-fail-under=80 --cov=plan_to_podcast --junit-xml=pytest=pytest_report.xml tests
+
+image-build:
+  stage: build
+  interruptible: true
+  image: quay.io/buildah/stable:latest
+  variables:
+    OCI_IMAGE_NAME: images.paas.redhat.com/business-services-analytics/plan-to-podcast
+    KUBERNETES_MEMORY_LIMIT: "3Gi"
+    KUBERNETES_MEMORY_REQUEST: "2Gi"
+  script:
+    - |
+      if [[ -n ${CI_COMMIT_TAG} && -z ${OCI_IMAGE_TAG} ]]; then
+        OCI_IMAGE_TAG=${CI_COMMIT_TAG}
+      fi
+      if [[ ${CI_COMMIT_BRANCH} =~ ^GFA-.*$ && -z ${OCI_IMAGE_TAG} ]]; then
+        _CI_COMMIT_BRANCH=$(echo "${CI_COMMIT_BRANCH}" | tr '[:upper:]' '[:lower:]')
+        OCI_IMAGE_TAG=${_CI_COMMIT_BRANCH}
+      fi
+    - buildah --storage-driver=${STORAGE_DRIVER:-vfs} bud ${BUILD_EXTRA_ARGS:-} --format=${IMAGE_FORMAT:-oci} --tls-verify=${TLS_VERIFY:-true} --no-cache -f ${DOCKERFILE:-Containerfile} -t ${OCI_IMAGE_NAME}:${OCI_IMAGE_TAG:-latest} ${BUILD_CONTEXT:-.}
+    - buildah --storage-driver=${STORAGE_DRIVER:-vfs} push ${PUSH_EXTRA_ARGS:-} --tls-verify=${TLS_VERIFY:-true} ${OCI_IMAGE_NAME}:${OCI_IMAGE_TAG:-latest} oci-archive:${CI_PROJECT_NAME}.tar
+  artifacts:
+    paths:
+      - "${CI_PROJECT_NAME}.tar" # TODO: Double check this matches the `skopeo copy` line below
+
+image-push:
+  stage: build
+  interruptible: true
+  image: quay.io/skopeo/stable:latest
+  variables:
+    OCI_IMAGE_NAME: images.paas.redhat.com/business-services-analytics/plan-to-podcast
+    OCI_IMAGE_REGISTRY: images.paas.redhat.com
+  script:
+    - skopeo login -u ${OCI_USER_NAME} -p ${OCI_USER_PASSWORD} ${OCI_IMAGE_REGISTRY}
+    - |
+      if [[ -n ${CI_COMMIT_TAG} && -z ${OCI_IMAGE_TAG} ]]; then
+        OCI_IMAGE_TAG=${CI_COMMIT_TAG}
+      fi
+      if [[ ${CI_COMMIT_BRANCH} =~ ^GFA-.*$ && -z ${OCI_IMAGE_TAG} ]]; then
+        _CI_COMMIT_BRANCH=$(echo "${CI_COMMIT_BRANCH}" | tr '[:upper:]' '[:lower:]')
+        OCI_IMAGE_TAG=${_CI_COMMIT_BRANCH}
+      fi
+    - skopeo copy oci-archive:${CI_PROJECT_NAME}.tar docker://${OCI_IMAGE_NAME}:${OCI_IMAGE_TAG:-latest}
+  needs: ["build"]

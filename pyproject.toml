@@ -1,0 +1,49 @@
+[tool.poetry]
+name = "plan_to_podcast"
+version = "0.1.0"
+description = ""
+readme = "README.md"
+authors = ["Taylor Agarwal <taagarwa@redhat.com>"]
+packages = [{include = "plan_to_podcast"}]
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.13"
+torch = "^2.6.0"
+torchaudio = "^2.6.0"
+torchvision = "^0.21.0"
+kokoro = "^0.7.15"
+soundfile = "^0.13.1"
+openai = "^1.63.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.1"
+pytest-cov = "^4.0.0"
+bump2version = "^1.0.1"
+ruff = "^0.9.6"
+
+[[tool.poetry.source]]
+name = "PyPI"
+priority = "primary"
+
+[[tool.poetry.source]]
+name = "de-cop-nexus"
+url = "https://nexus.corp.redhat.com/repository/de-cop-pypi-releases/simple/"
+priority = "supplemental"
+
+[tool.ruff]
+line-length = 140
+
+[tool.ruff.lint]
+select = ["E", "F", "D", "C", "N"]
+ignore = [
+    "E501", # line-too-long
+    "E402", # module-import-not-at-top-file
+    "D203", # one-blank-line-before-class
+    "D212", # multi-line-summary-first-line
+    "D100", # undocumented-public-module
+]
+per-file-ignores = { "tests/*" = ["D"] }
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
