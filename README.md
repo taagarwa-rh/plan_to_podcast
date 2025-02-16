@@ -26,6 +26,16 @@ To begin working on this project:
 
 ### Usage
 
+#### Run the Gradio App
+
+```sh
+poetry run gradio plan_to_podcast/app.py
+```
+
+Once it's running the app will be available at [http://localhost:7860](http://localhost:7860).
+
+#### Run an Example
+
 ```sh
 poetry run python plan_to_podcast/main.py --help
 ```
